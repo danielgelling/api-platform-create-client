@@ -169,6 +169,13 @@ export default class {
         return "string";
     }
 
+    if (field.embedded) {
+      // FIXME: Remove the line below
+      // field.reference = field.embedded.title;
+
+      return `${field.embedded.title}|string`;
+    }
+
     return "any";
   }
 
