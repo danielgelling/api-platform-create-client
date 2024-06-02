@@ -33,10 +33,10 @@ const extractHubURL = (response: Response): null | URL => {
   return matches && matches[1] ? new URL(matches[1], ENTRYPOINT) : null;
 };
 
-export const fetch = async <TData extends Item>(
-  id: string | TData,
+export const fetch = async <T extends Item>(
+  id: string | T,
   init: RequestInit = {},
-): Promise<FetchResponse<TData> | undefined> => {
+): Promise<FetchResponse<T>> => {
   if (typeof init.headers === 'undefined') init.headers = {};
   if (!Object.prototype.hasOwnProperty.call(init.headers, 'Accept'))
     init.headers = { ...init.headers, Accept: MIME_TYPE };
@@ -62,7 +62,11 @@ export const fetch = async <TData extends Item>(
 
   const errorMessage = json['{{{hydraPrefix}}}title'];
   const status = json['{{{hydraPrefix}}}description'] || resp.statusText;
-  if (!json.violations) throw Error(errorMessage);
+
+  if (!json.violations) {
+    throw {message: errorMessage, name: 'Request failed', response: {resp, text}};
+  }
+
   const fields: { [key: string]: string } = {};
   json.violations.map(
     (violation: Violation) =>
