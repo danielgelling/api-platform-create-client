@@ -45,35 +45,53 @@ export const fetch = async <T extends Item>(
     !(init.body instanceof FormData) &&
     !Object.prototype.hasOwnProperty.call(init.headers, 'Content-Type')
   )
-    init.headers = { ...init.headers, 'Content-Type': MIME_TYPE };
+    init.headers = {
+      ...init.headers,
+      'Content-Type': init.method === 'PATCH' ? 'application/merge-patch+json' : MIME_TYPE
+    };
 
   const resp = await isomorphicFetch(`${ENTRYPOINT}${typeof id === 'string' ? id : id['@id']}`, init);
-  if (resp.status === 204) return;
 
-  const text = await resp.text();
-  const json = JSON.parse(text);
-  if (resp.ok) {
-    return {
-      hubURL: extractHubURL(resp)?.toString() || null, // URL cannot be serialized as JSON, must be sent as string
-      data: json,
-      text,
-    };
+  try {
+    if (resp.status === 204) {
+      return {
+        hubURL: extractHubURL(resp)?.toString() || null, // URL cannot be serialized as JSON, must be sent as string
+        data: {} as T,
+        text: null,
+      }
+    }
+
+    const text = await resp.text();
+    const json = JSON.parse(text);
+    if (resp.ok) {
+      return {
+        hubURL: extractHubURL(resp)?.toString() || null, // URL cannot be serialized as JSON, must be sent as string
+        data: json,
+        text,
+      };
+    }
+
+    const errorMessage = json['{{{hydraPrefix}}}title'];
+    const status = json['{{{hydraPrefix}}}description'] || resp.statusText;
+
+    if (!json.violations) {
+      throw {custom: true, message: errorMessage, name: 'Request failed', response: {resp, text}};
+    }
+
+    const fields: { [key: string]: string } = {};
+    json.violations.map(
+      (violation: Violation) =>
+        (fields[violation.propertyPath] = violation.message),
+    );
+
+    throw { custom: true, message: errorMessage, status, fields } as FetchError;
+  } catch(e) {
+    if (e.custom) {
+      throw e;
+    }
+
+
   }
-
-  const errorMessage = json['{{{hydraPrefix}}}title'];
-  const status = json['{{{hydraPrefix}}}description'] || resp.statusText;
-
-  if (!json.violations) {
-    throw {message: errorMessage, name: 'Request failed', response: {resp, text}};
-  }
-
-  const fields: { [key: string]: string } = {};
-  json.violations.map(
-    (violation: Violation) =>
-      (fields[violation.propertyPath] = violation.message),
-  );
-
-  throw { message: errorMessage, status, fields } as FetchError;
 };
 
 export const getItemPath = (
